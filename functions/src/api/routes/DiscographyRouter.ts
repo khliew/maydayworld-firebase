@@ -39,7 +39,7 @@ export class DiscographyRouter {
             res.status(404)
               .send({
                 error: {
-                  message: 'disco not exist'
+                  message: `discography not found: ${id}`
                 }
               });
           }
@@ -48,7 +48,7 @@ export class DiscographyRouter {
           res.status(404)
             .send({
               error: {
-                message: 'disco not found'
+                message: `discography not found: ${id}`
               }
             });
         });

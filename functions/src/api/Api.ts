@@ -3,7 +3,7 @@ import * as cors from 'cors';
 import * as express from 'express';
 import * as helmet from 'helmet';
 // import * as logger from 'morgan';
-// import AlbumRouter from './routes/AlbumRouter';
+import AlbumRouter from './routes/AlbumRouter';
 import DiscographyRouter from './routes/DiscographyRouter';
 // import LogInRouter from './routes/LogInRouter';
 // import SongRouter from './routes/SongRouter';
@@ -53,7 +53,7 @@ class Api {
     rootRouter.get('/', (req, res, next) => res.json('Hello World!'));
     this.express.use('/', rootRouter);
 
-    // this.express.use('/albums', AlbumRouter);
+    this.express.use('/albums', AlbumRouter);
     this.express.use('/disco', DiscographyRouter);
     // this.express.use('/login', LogInRouter);
     // this.express.use('/songs', SongRouter);
