@@ -6,7 +6,7 @@ import * as helmet from 'helmet';
 import AlbumRouter from './routes/AlbumRouter';
 import DiscographyRouter from './routes/DiscographyRouter';
 // import LogInRouter from './routes/LogInRouter';
-// import SongRouter from './routes/SongRouter';
+import SongRouter from './routes/SongRouter';
 
 /**
  * Creates an API service using Express.
@@ -56,7 +56,7 @@ class Api {
     this.express.use('/albums', AlbumRouter);
     this.express.use('/disco', DiscographyRouter);
     // this.express.use('/login', LogInRouter);
-    // this.express.use('/songs', SongRouter);
+    this.express.use('/songs', SongRouter);
   }
 }
 
