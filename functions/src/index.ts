@@ -1,8 +1,14 @@
+import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
+import * as DbHelper from './db/DbHelper';
 
-// // Start writing Firebase Functions
-// // https://firebase.google.com/docs/functions/typescript
-//
-// export const helloWorld = functions.https.onRequest((request, response) => {
-//  response.send("Hello from Firebase!");
-// });
+admin.initializeApp();
+
+// Api must be loaded after firebase admin is initialized
+import Api from './api/Api';
+
+// api for front-end
+export const api = functions.https.onRequest(Api);
+
+export const onUpdateAlbum = functions.firestore.document('albums/{albumId}')
+  .onUpdate(DbHelper.onUpdateAlbum);
