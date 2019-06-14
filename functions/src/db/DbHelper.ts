@@ -7,6 +7,7 @@ import Song from '../models/Song';
 import SongAlbum from '../models/SongAlbum';
 
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
+type WriteBatch = admin.firestore.WriteBatch;
 
 /**
  * This method is invoked when an album is updated.
@@ -98,32 +99,7 @@ function updateAlbumSongLists(songId: string, song: Song) {
       const updates: Promise<void>[] = [];
       const data = doc.data() as SongAlbum;
       Object.keys(data).forEach(albumId => {
-        const albumRef = admin.firestore().doc(`albums/${albumId}`);
-        const update = albumRef.get()
-          .then(albumDoc => {
-            if (!albumDoc.exists) {
-              return;
-            }
-
-            const trackNum = data[albumId];
-            const album = albumDoc.data() as Album;
-
-            if (!album.songs) {
-              album.songs = {};
-            }
-
-            if (!album.songs[trackNum]) {
-              album.songs[trackNum] = {} as Song;
-            }
-            const item = album.songs[trackNum];
-            item.songId = song.songId;
-            item.title = song.title;
-
-            batch.set(albumRef, album);
-          })
-          .catch(error => console.error(error));
-
-        updates.push(update);
+        updates.push(writeSongtoAlbum(albumId, data[albumId], song, batch));
       });
 
       Promise.all(updates)
@@ -157,37 +133,147 @@ export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventCont
       // update albums with changed data
       const updates: Promise<void>[] = [];
       Object.keys(songAlbum).forEach(albumId => {
-        const albumRef = admin.firestore().doc(`albums/${albumId}`);
-        const update = albumRef.get()
-          .then(albumDoc => {
-            if (!albumDoc.exists) {
-              return;
-            }
-
-            const trackNum = songAlbum[albumId];
-            const album = albumDoc.data() as Album;
-
-            if (!album.songs) {
-              album.songs = {};
-            }
-
-            if (!album.songs[trackNum]) {
-              album.songs[trackNum] = {} as Song;
-            }
-            const item = album.songs[trackNum];
-            item.songId = song.songId;
-            item.title = song.title;
-
-            batch.set(albumRef, album);
-          })
-          .catch(error => console.error(error));
-
-        updates.push(update);
+        updates.push(writeSongtoAlbum(albumId, songAlbum[albumId], song, batch));
       });
 
       Promise.all(updates)
         .then(() => batch.commit())
         .catch(error => console.error(error));
+    })
+    .catch(error => console.error(error));
+}
+
+export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: EventContext) => {
+  const after = change.after.data() as SongAlbum;
+  const before = change.before.data() as SongAlbum;
+
+  const songRef = admin.firestore().doc(`songs/${change.after.id}`);
+  songRef.get()
+    .then(doc => {
+      if (!doc.exists) {
+        return;
+      }
+
+      const song = doc.data() as Song;
+
+      const keysAfter = Object.keys(after);
+      const keysBefore = Object.keys(before);
+
+      const batch = admin.firestore().batch();
+      const changes: Promise<void>[] = [];
+
+      keysAfter.forEach(albumId => {
+        if (keysBefore.includes(albumId)) {
+          if (after[albumId] !== before[albumId]) {
+            // updated track number in the album
+            changes.push(updateSongInAlbum(albumId, before[albumId], after[albumId], song, batch));
+          }
+
+          // remove album from keysBefore
+          const index = keysBefore.indexOf(albumId);
+          if (index > -1) {
+            keysBefore.splice(index, 1);
+          }
+        } else {
+          // added song to the album
+          changes.push(writeSongtoAlbum(albumId, after[albumId], song, batch));
+        }
+      });
+
+      // deleted song from the albums left in keysBefore
+      keysBefore.forEach(albumId => {
+        changes.push(removeSongFromAlbum(albumId, before[albumId], song, batch));
+      });
+
+      Promise.all(changes)
+        .then(() => batch.commit())
+        .catch(error => console.error(error));
+    })
+    .catch(error => console.error(error));
+};
+
+function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: number, song: Song, batch: WriteBatch) {
+  const albumRef = admin.firestore().doc(`albums/${albumId}`);
+  return albumRef.get()
+    .then(albumDoc => {
+      if (!albumDoc.exists) {
+        return;
+      }
+
+      const album = albumDoc.data() as Album;
+
+      if (!album.songs) {
+        album.songs = {};
+      }
+
+      const existing = album.songs[oldTrackNum];
+      if (!!existing && existing.songId === song.songId) {
+        delete album.songs[oldTrackNum];
+      }
+
+      if (!album.songs[newTrackNum]) {
+        album.songs[newTrackNum] = {} as Song;
+      }
+      const item = album.songs[newTrackNum];
+      item.songId = song.songId;
+      item.title = song.title;
+
+      batch.set(albumRef, album);
+    })
+    .catch(error => console.error(error));
+}
+
+function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
+  const albumRef = admin.firestore().doc(`albums/${albumId}`);
+  return albumRef.get()
+    .then(albumDoc => {
+      if (!albumDoc.exists) {
+        return;
+      }
+
+      const album = albumDoc.data() as Album;
+
+      if (!album.songs) {
+        album.songs = {};
+      }
+
+      if (!album.songs[trackNum]) {
+        album.songs[trackNum] = {} as Song;
+      }
+      const item = album.songs[trackNum];
+      item.songId = song.songId;
+      item.title = song.title;
+
+      batch.set(albumRef, album);
+    })
+    .catch(error => console.error(error));
+}
+
+function removeSongFromAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
+  const albumRef = admin.firestore().doc(`albums/${albumId}`);
+  return albumRef.get()
+    .then(albumDoc => {
+      if (!albumDoc.exists) {
+        return;
+      }
+
+      const album = albumDoc.data() as Album;
+
+      if (!album.songs) {
+        return;
+      }
+
+      if (!album.songs[trackNum]) {
+        return;
+      }
+
+      // remove only if the song ids match
+      const existing = album.songs[trackNum];
+      if (existing.songId === song.songId) {
+        delete album.songs[trackNum];
+      }
+
+      batch.set(albumRef, album);
     })
     .catch(error => console.error(error));
 }

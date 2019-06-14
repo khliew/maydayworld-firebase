@@ -21,3 +21,6 @@ export const onCreateSong = functions.firestore.document('songs/{songId}')
 
 export const onCreateSongAlbum = functions.firestore.document('songAlbums/{songId}')
   .onCreate(DbHelper.onCreateSongAlbum);
+
+export const onUpdateSongAlbum = functions.firestore.document('songAlbums/{songId}')
+  .onUpdate(DbHelper.onUpdateSongAlbum);
