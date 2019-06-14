@@ -1,15 +1,9 @@
 import Line from './Line';
+import Title from './Title';
 
 export default interface Song {
   songId: string;
-  title: {
-    chinese: {
-      zht: string;
-      zhp: string;
-      eng: string;
-    };
-    english: string;
-  };
+  title: Title;
   lyricist: string;
   composer: string;
   arranger: string;

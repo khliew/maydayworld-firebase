@@ -12,3 +12,6 @@ export const api = functions.https.onRequest(Api);
 
 export const onUpdateAlbum = functions.firestore.document('albums/{albumId}')
   .onUpdate(DbHelper.onUpdateAlbum);
+
+export const onUpdateSong = functions.firestore.document('songs/{songId}')
+  .onUpdate(DbHelper.onUpdateSong);

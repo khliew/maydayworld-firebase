@@ -1,8 +1,13 @@
 import * as admin from 'firebase-admin';
 import { Change, EventContext } from 'firebase-functions';
 import Album from '../models/Album';
-import Discography from "../models/Discography";
+import Discography from '../models/Discography';
+import Title from '../models/Title';
+import Song from '../models/Song';
 
+/**
+ * This method is invoked when an album is updated.
+ */
 export const onUpdateAlbum = (change: Change<admin.firestore.DocumentSnapshot>, context: EventContext) => {
   const after = change.after.data() as Album;
   const before = change.before.data() as Album;
@@ -10,10 +15,11 @@ export const onUpdateAlbum = (change: Change<admin.firestore.DocumentSnapshot>, 
   if (before.albumId === after.albumId
     && before.type === after.type
     && before.releaseDate === after.releaseDate
-    && areTitlesEqual(before, after)) {
+    && areTitlesEqual(before.title, after.title)) {
     return; // no changes to make to discography
   }
 
+  // update discography with changed data
   const discoRef = admin.firestore().doc('discos/mayday');
   discoRef.get()
     .then(doc => {
@@ -48,9 +54,69 @@ export const onUpdateAlbum = (change: Change<admin.firestore.DocumentSnapshot>, 
     .catch(error => console.log(error));
 };
 
-function areTitlesEqual(album1: Album, album2: Album) {
-  return album1.title.english === album2.title.english
-    && album1.title.chinese.zht === album2.title.chinese.zht
-    && album1.title.chinese.zhp === album2.title.chinese.zhp
-    && album1.title.chinese.eng === album2.title.chinese.eng
+/**
+ * This method is invoked when a song is updated.
+ */
+export const onUpdateSong = (change: Change<admin.firestore.DocumentSnapshot>, context: EventContext) => {
+  const after = change.after.data() as Song;
+  const before = change.before.data() as Song;
+
+  if (before.songId === after.songId
+    && areTitlesEqual(before.title, after.title)) {
+    return; // no changes to make to album
+  }
+
+  const batch = admin.firestore().batch();
+
+  const songRef = admin.firestore().doc(`songAlbums/${before.songId}`);
+  songRef.get()
+    .then(doc => {
+      if (!doc.exists) {
+        return;
+      }
+
+      // update albums with changed data
+      const updates: Promise<void>[] = [];
+      const data = doc.data() as admin.firestore.DocumentData; // data = { albumId: trackNum }
+      Object.keys(data).forEach(albumId => {
+        const albumRef = admin.firestore().doc(`albums/${albumId}`);
+        const update = albumRef.get()
+          .then(albumDoc => {
+            if (!albumDoc.exists) {
+              return;
+            }
+
+            const trackNum = data[albumId];
+            const album = albumDoc.data() as Album;
+
+            if (!album.songs) {
+              album.songs = {};
+            }
+
+            if (!album.songs[trackNum]) {
+              album.songs[trackNum] = {} as Song;
+            }
+            const song = album.songs[trackNum];
+            song.songId = after.songId;
+            song.title = after.title;
+
+            batch.set(albumRef, album);
+          })
+          .catch(error => console.error(error));
+
+        updates.push(update);
+      });
+
+      Promise.all(updates)
+        .then(() => batch.commit())
+        .catch(error => console.error(error));
+    })
+    .catch(error => console.error(error));
+};
+
+function areTitlesEqual(title1: Title, title2: Title) {
+  return title1.english === title2.english
+    && title1.chinese.zht === title2.chinese.zht
+    && title1.chinese.zhp === title2.chinese.zhp
+    && title1.chinese.eng === title2.chinese.eng
 }

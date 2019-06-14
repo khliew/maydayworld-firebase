@@ -1,18 +1,12 @@
 import Song from './Song';
+import Title from './Title';
+import AlbumType from './AlbumType';
 
 export default interface Album {
   albumId: string;
-  type: 'studio' | 'compilation' | 'ep' | 'other';
-  title: {
-    chinese: {
-      zht: string;
-      zhp: string;
-      eng: string;
-    };
-    english: string;
-  };
-  releaseDate?: string;
-  disable: boolean;
-  songIds: string[];
-  songs: Song[];
+  type: AlbumType;
+  title: Title;
+  releaseDate: string;
+  disabled: boolean;
+  songs: { [track: number]: Song };
 }

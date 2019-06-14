@@ -1,10 +1,11 @@
 import Album from './Album';
+import AlbumType from './AlbumType';
 
 export default interface Discography {
   artistId: string;
   sections: [
     {
-      type: 'studio' | 'compilation' | 'ep' | 'other';
+      type: AlbumType;
       label: string;
       albums: Album[];
     }
