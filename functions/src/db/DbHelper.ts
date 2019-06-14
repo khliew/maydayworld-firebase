@@ -4,8 +4,8 @@ import Album from '../models/Album';
 import Discography from '../models/Discography';
 import Title from '../models/Title';
 import Song from '../models/Song';
+import SongAlbum from '../models/SongAlbum';
 
-type DocumentData = admin.firestore.DocumentData;
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 
 /**
@@ -85,8 +85,6 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
  * Updates the song list of albums associated with a song.
  */
 function updateAlbumSongLists(songId: string, song: Song) {
-  const batch = admin.firestore().batch();
-
   const songAlbumRef = admin.firestore().doc(`songAlbums/${songId}`);
   songAlbumRef.get()
     .then(doc => {
@@ -94,9 +92,11 @@ function updateAlbumSongLists(songId: string, song: Song) {
         return;
       }
 
+      const batch = admin.firestore().batch();
+
       // update albums with changed data
       const updates: Promise<void>[] = [];
-      const data = doc.data() as DocumentData; // data = { albumId: trackNum }
+      const data = doc.data() as SongAlbum;
       Object.keys(data).forEach(albumId => {
         const albumRef = admin.firestore().doc(`albums/${albumId}`);
         const update = albumRef.get()
@@ -138,4 +138,56 @@ function areTitlesEqual(title1: Title, title2: Title) {
     && title1.chinese.zht === title2.chinese.zht
     && title1.chinese.zhp === title2.chinese.zhp
     && title1.chinese.eng === title2.chinese.eng
+}
+
+export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
+  const songId = snapshot.id;
+  const songAlbum = snapshot.data() as SongAlbum;
+
+  const songRef = admin.firestore().doc(`songs/${songId}`);
+  songRef.get()
+    .then(doc => {
+      if (!doc.exists) {
+        return;
+      }
+
+      const song = doc.data() as Song;
+      const batch = admin.firestore().batch();
+
+      // update albums with changed data
+      const updates: Promise<void>[] = [];
+      Object.keys(songAlbum).forEach(albumId => {
+        const albumRef = admin.firestore().doc(`albums/${albumId}`);
+        const update = albumRef.get()
+          .then(albumDoc => {
+            if (!albumDoc.exists) {
+              return;
+            }
+
+            const trackNum = songAlbum[albumId];
+            const album = albumDoc.data() as Album;
+
+            if (!album.songs) {
+              album.songs = {};
+            }
+
+            if (!album.songs[trackNum]) {
+              album.songs[trackNum] = {} as Song;
+            }
+            const item = album.songs[trackNum];
+            item.songId = song.songId;
+            item.title = song.title;
+
+            batch.set(albumRef, album);
+          })
+          .catch(error => console.error(error));
+
+        updates.push(update);
+      });
+
+      Promise.all(updates)
+        .then(() => batch.commit())
+        .catch(error => console.error(error));
+    })
+    .catch(error => console.error(error));
 }
