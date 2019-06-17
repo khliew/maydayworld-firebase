@@ -5,9 +5,52 @@ import Discography from '../models/Discography';
 import Title from '../models/Title';
 import Song from '../models/Song';
 import SongAlbum from '../models/SongAlbum';
+import SongMetadata from '../models/SongMetadata';
 
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 type WriteBatch = admin.firestore.WriteBatch;
+
+/**
+ * This method is invoked when an album is created.
+ */
+export const onCreateAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
+  const album = snapshot.data() as Album;
+
+  if (!album.type) {
+    return; // no section to put album in
+  }
+
+  const discoRef = admin.firestore().doc('discos/mayday');
+  discoRef.get()
+    .then(doc => {
+      if (!doc.exists) {
+        return;
+      }
+
+      const disco = doc.data() as Discography;
+
+      if (!disco.sections) {
+        disco.sections = [];
+      }
+
+      let section = disco.sections.find(item => item.type === album.type);
+      if (!section) {
+        section = { type: album.type, albums: [] };
+        disco.sections.push(section);
+      }
+
+      section.albums.push({
+        id: album.id,
+        title: album.title,
+        releaseDate: album.releaseDate,
+        disabled: album.disabled
+      });
+
+      discoRef.set(disco)
+        .catch(error => console.log(error));
+    })
+    .catch(error => console.log(error));
+};
 
 /**
  * This method is invoked when an album is updated.
@@ -18,6 +61,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
 
   if (before.type === after.type
     && before.releaseDate === after.releaseDate
+    && before.disabled === after.disabled
     && areTitlesEqual(before.title, after.title)) {
     return; // no changes to make to discography
   }
@@ -32,22 +76,42 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
 
       const disco = doc.data() as Discography;
 
-      let found = false;
-      for (const section of disco.sections) {
-        for (const album of section.albums) {
-          if (album.id === after.id) {
-            album.type = after.type;
-            album.releaseDate = after.releaseDate;
-            album.title = after.title;
+      if (!disco.sections) {
+        disco.sections = [];
+      }
 
-            found = true;
-            break;
+      // remove album from old section
+      if (before.type !== after.type) {
+        const oldSection = disco.sections.find(item => item.type === before.type);
+        if (!!oldSection && !!oldSection.albums) {
+          const oldIndex = oldSection.albums.findIndex(item => item.id === before.id);
+          if (oldIndex > -1) {
+            oldSection.albums.splice(oldIndex, 1);
           }
         }
+      }
 
-        if (found) {
-          break;
-        }
+      let section = disco.sections.find(item => item.type === after.type);
+      if (!section) {
+        section = { type: after.type, albums: [] };
+        disco.sections.push(section);
+      }
+
+      // add or update album in new section
+      const index = section.albums.findIndex(item => item.id === after.id);
+      if (index > -1) {
+        const album = section.albums[index];
+        album.id = after.id;
+        album.title = after.title;
+        album.releaseDate = after.releaseDate;
+        album.disabled = after.disabled;
+      } else {
+        section.albums.push({
+          id: after.id,
+          title: after.title,
+          releaseDate: after.releaseDate,
+          disabled: after.disabled
+        });
       }
 
       discoRef.set(disco)
@@ -72,7 +136,8 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
   const after = change.after.data() as Song;
   const before = change.before.data() as Song;
 
-  if (areTitlesEqual(before.title, after.title)) {
+  if (before.disabled === after.disabled
+    && areTitlesEqual(before.title, after.title)) {
     return; // no changes to make to album
   }
 
@@ -107,7 +172,7 @@ function updateAlbumSongLists(songId: string, song: Song) {
       const updates: Promise<void>[] = [];
       const data = doc.data() as SongAlbum;
       Object.keys(data).forEach(albumId => {
-        updates.push(writeSongtoAlbum(albumId, data[albumId], song, batch));
+        updates.push(writeSongToAlbum(albumId, data[albumId], song, batch));
       });
 
       Promise.all(updates)
@@ -144,7 +209,7 @@ export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventCont
       // update albums with changed data
       const updates: Promise<void>[] = [];
       Object.keys(songAlbum).forEach(albumId => {
-        updates.push(writeSongtoAlbum(albumId, songAlbum[albumId], song, batch));
+        updates.push(writeSongToAlbum(albumId, songAlbum[albumId], song, batch));
       });
 
       Promise.all(updates)
@@ -190,7 +255,7 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
           }
         } else {
           // added song to the album
-          changes.push(writeSongtoAlbum(albumId, after[albumId], song, batch));
+          changes.push(writeSongToAlbum(albumId, after[albumId], song, batch));
         }
       });
 
@@ -250,12 +315,15 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
       }
 
       // put song at new track number
-      if (!album.songs[newTrackNum]) {
-        album.songs[newTrackNum] = {} as Song;
+      let item = album.songs[newTrackNum];
+      if (!item) {
+        item = {} as SongMetadata;
+        album.songs[newTrackNum] = item;
       }
-      const item = album.songs[newTrackNum];
+
       item.id = song.id;
       item.title = song.title;
+      item.disabled = song.disabled;
 
       batch.set(albumRef, album);
     })
@@ -265,7 +333,7 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
 /**
  * Puts a song at `trackNum` position in an album.
  */
-function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
+function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
   return albumRef.get()
     .then(albumDoc => {
@@ -279,14 +347,16 @@ function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: 
         album.songs = {};
       }
 
-      if (!album.songs[trackNum]) {
-        album.songs[trackNum] = {} as Song;
+      // replace song at trackNum
+      let item = album.songs[trackNum];
+      if (!item) {
+        item = {} as SongMetadata;
+        album.songs[trackNum] = item;
       }
 
-      // replace song at trackNum
-      const item = album.songs[trackNum];
       item.id = song.id;
       item.title = song.title;
+      item.disabled = song.disabled;
 
       batch.set(albumRef, album);
     })

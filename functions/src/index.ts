@@ -10,6 +10,9 @@ import Api from './api/Api';
 // api for front-end
 export const api = functions.https.onRequest(Api);
 
+export const onCreateAlbum = functions.firestore.document('albums/{albumId}')
+  .onCreate(DbHelper.onCreateAlbum);
+
 export const onUpdateAlbum = functions.firestore.document('albums/{albumId}')
   .onUpdate(DbHelper.onUpdateAlbum);
 

@@ -1,13 +1,6 @@
-import Album from './Album';
-import AlbumType from './AlbumType';
+import Section from './Section';
 
 export default interface Discography {
   id: string;
-  sections: [
-    {
-      type: AlbumType;
-      label: string;
-      albums: Album[];
-    }
-  ];
+  sections: Section[];
 }
