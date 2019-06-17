@@ -182,13 +182,30 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
 
       // deleted song from the albums left in keysBefore
       keysBefore.forEach(albumId => {
-        changes.push(removeSongFromAlbum(albumId, before[albumId], song, batch));
+        changes.push(removeSongFromAlbum(albumId, before[albumId], song.songId, batch));
       });
 
       Promise.all(changes)
         .then(() => batch.commit())
         .catch(error => console.error(error));
     })
+    .catch(error => console.error(error));
+};
+
+export const onDeleteSongAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
+  const songId = snapshot.id;
+  const songAlbum = snapshot.data() as SongAlbum;
+
+  const batch = admin.firestore().batch();
+
+  // update albums with changed data
+  const updates: Promise<void>[] = [];
+  Object.keys(songAlbum).forEach(albumId => {
+    updates.push(removeSongFromAlbum(albumId, songAlbum[albumId], songId, batch));
+  });
+
+  Promise.all(updates)
+    .then(() => batch.commit())
     .catch(error => console.error(error));
 };
 
@@ -249,7 +266,7 @@ function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: 
     .catch(error => console.error(error));
 }
 
-function removeSongFromAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
+function removeSongFromAlbum(albumId: string, trackNum: number, songId: string, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
   return albumRef.get()
     .then(albumDoc => {
@@ -269,7 +286,7 @@ function removeSongFromAlbum(albumId: string, trackNum: number, song: Song, batc
 
       // remove only if the song ids match
       const existing = album.songs[trackNum];
-      if (existing.songId === song.songId) {
+      if (existing.songId === songId) {
         delete album.songs[trackNum];
       }
 
