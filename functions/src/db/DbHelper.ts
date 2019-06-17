@@ -80,6 +80,17 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
 };
 
 /**
+ * This method is invoked when a song is deleted.
+ */
+export const onDeleteSong = (snapshot: DocumentSnapshot, context: EventContext) => {
+  const songId = snapshot.id;
+
+  // remove song from songAlbums collection
+  admin.firestore().doc(`songAlbums/${songId}`).delete()
+    .catch(error => console.error(error));
+};
+
+/**
  * Updates the song list of albums associated with a song.
  */
 function updateAlbumSongLists(songId: string, song: Song) {
