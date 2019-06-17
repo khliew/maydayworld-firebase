@@ -16,11 +16,14 @@ export const onCreateAlbum = functions.firestore.document('albums/{albumId}')
 export const onUpdateAlbum = functions.firestore.document('albums/{albumId}')
   .onUpdate(DbHelper.onUpdateAlbum);
 
-export const onUpdateSong = functions.firestore.document('songs/{songId}')
-  .onUpdate(DbHelper.onUpdateSong);
+export const onDeleteAlbum = functions.firestore.document('albums/{albumId}')
+  .onDelete(DbHelper.onDeleteAlbum);
 
 export const onCreateSong = functions.firestore.document('songs/{songId}')
   .onCreate(DbHelper.onCreateSong);
+
+export const onUpdateSong = functions.firestore.document('songs/{songId}')
+  .onUpdate(DbHelper.onUpdateSong);
 
 export const onDeleteSong = functions.firestore.document('songs/{songId}')
   .onDelete(DbHelper.onDeleteSong);
@@ -32,4 +35,4 @@ export const onUpdateSongAlbum = functions.firestore.document('songAlbums/{songI
   .onUpdate(DbHelper.onUpdateSongAlbum);
 
 export const onDeleteSongAlbum = functions.firestore.document('songAlbums/{songId}')
-.onDelete(DbHelper.onDeleteSongAlbum);
+  .onDelete(DbHelper.onDeleteSongAlbum);

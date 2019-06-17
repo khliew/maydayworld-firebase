@@ -121,6 +121,42 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
 };
 
 /**
+ * This method is invoked when an album is deleted.
+ */
+export const onDeleteAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
+  const album = snapshot.data() as Album;
+
+  const discoRef = admin.firestore().doc('discos/mayday');
+  discoRef.get()
+    .then(doc => {
+      if (!doc.exists) {
+        return;
+      }
+
+      const disco = doc.data() as Discography;
+
+      if (!disco.sections) {
+        return;
+      }
+
+      const section = disco.sections.find(item => item.type === album.type);
+      if (!section) {
+        return;
+      }
+
+      // remove album from section
+      const index = section.albums.findIndex(item => item.id === album.id);
+      if (index > -1) {
+        section.albums.splice(index);
+      }
+
+      discoRef.set(disco)
+        .catch(error => console.log(error));
+    })
+    .catch(error => console.log(error));
+};
+
+/**
  * This method is invoked when a song is created.
  */
 export const onCreateSong = (snapshot: DocumentSnapshot, context: EventContext) => {
