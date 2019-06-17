@@ -16,8 +16,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
   const after = change.after.data() as Album;
   const before = change.before.data() as Album;
 
-  if (before.albumId === after.albumId
-    && before.type === after.type
+  if (before.type === after.type
     && before.releaseDate === after.releaseDate
     && areTitlesEqual(before.title, after.title)) {
     return; // no changes to make to discography
@@ -36,8 +35,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
       let found = false;
       for (const section of disco.sections) {
         for (const album of section.albums) {
-          if (album.albumId === before.albumId) {
-            album.albumId = after.albumId;
+          if (album.id === after.id) {
             album.type = after.type;
             album.releaseDate = after.releaseDate;
             album.title = after.title;
@@ -64,7 +62,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
 export const onCreateSong = (snapshot: DocumentSnapshot, context: EventContext) => {
   const song = snapshot.data() as Song;
 
-  updateAlbumSongLists(song.songId, song);
+  updateAlbumSongLists(snapshot.id, song);
 };
 
 /**
@@ -74,12 +72,11 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
   const after = change.after.data() as Song;
   const before = change.before.data() as Song;
 
-  if (before.songId === after.songId
-    && areTitlesEqual(before.title, after.title)) {
+  if (areTitlesEqual(before.title, after.title)) {
     return; // no changes to make to album
   }
 
-  updateAlbumSongLists(before.songId, after);
+  updateAlbumSongLists(change.after.id, after);
 };
 
 /**
@@ -116,6 +113,9 @@ function areTitlesEqual(title1: Title, title2: Title) {
     && title1.chinese.eng === title2.chinese.eng
 }
 
+/**
+ * This method is invoked when a songAlbum is created.
+ */
 export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
   const songId = snapshot.id;
   const songAlbum = snapshot.data() as SongAlbum;
@@ -143,6 +143,9 @@ export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventCont
     .catch(error => console.error(error));
 }
 
+/**
+ * This method is invoked when a songAlbum is updated.
+ */
 export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: EventContext) => {
   const after = change.after.data() as SongAlbum;
   const before = change.before.data() as SongAlbum;
@@ -182,7 +185,7 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
 
       // deleted song from the albums left in keysBefore
       keysBefore.forEach(albumId => {
-        changes.push(removeSongFromAlbum(albumId, before[albumId], song.songId, batch));
+        changes.push(removeSongFromAlbum(albumId, before[albumId], song.id, batch));
       });
 
       Promise.all(changes)
@@ -192,6 +195,9 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
     .catch(error => console.error(error));
 };
 
+/**
+ * This method is invoked when a songAlbum is deleted.
+ */
 export const onDeleteSongAlbum = (snapshot: DocumentSnapshot, context: EventContext) => {
   const songId = snapshot.id;
   const songAlbum = snapshot.data() as SongAlbum;
@@ -209,6 +215,9 @@ export const onDeleteSongAlbum = (snapshot: DocumentSnapshot, context: EventCont
     .catch(error => console.error(error));
 };
 
+/**
+ * Updates a song's track position in an album, moving it from `oldTrackNum` to `newTrackNum`.
+ */
 function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: number, song: Song, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
   return albumRef.get()
@@ -223,16 +232,18 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
         album.songs = {};
       }
 
+      // remove song from previous track number
       const existing = album.songs[oldTrackNum];
-      if (!!existing && existing.songId === song.songId) {
+      if (!!existing && existing.id === song.id) {
         delete album.songs[oldTrackNum];
       }
 
+      // put song at new track number
       if (!album.songs[newTrackNum]) {
         album.songs[newTrackNum] = {} as Song;
       }
       const item = album.songs[newTrackNum];
-      item.songId = song.songId;
+      item.id = song.id;
       item.title = song.title;
 
       batch.set(albumRef, album);
@@ -240,6 +251,9 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
     .catch(error => console.error(error));
 }
 
+/**
+ * Puts a song at `trackNum` position in an album.
+ */
 function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
   return albumRef.get()
@@ -257,8 +271,10 @@ function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: 
       if (!album.songs[trackNum]) {
         album.songs[trackNum] = {} as Song;
       }
+
+      // replace song at trackNum
       const item = album.songs[trackNum];
-      item.songId = song.songId;
+      item.id = song.id;
       item.title = song.title;
 
       batch.set(albumRef, album);
@@ -266,6 +282,9 @@ function writeSongtoAlbum(albumId: string, trackNum: number, song: Song, batch: 
     .catch(error => console.error(error));
 }
 
+/**
+ * Removes a song from `trackNum` position in an album.
+ */
 function removeSongFromAlbum(albumId: string, trackNum: number, songId: string, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
   return albumRef.get()
@@ -286,7 +305,7 @@ function removeSongFromAlbum(albumId: string, trackNum: number, songId: string, 
 
       // remove only if the song ids match
       const existing = album.songs[trackNum];
-      if (existing.songId === songId) {
+      if (existing.id === songId) {
         delete album.songs[trackNum];
       }
 

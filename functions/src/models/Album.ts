@@ -3,7 +3,7 @@ import Title from './Title';
 import AlbumType from './AlbumType';
 
 export default interface Album {
-  albumId: string;
+  id: string;
   type: AlbumType;
   title: Title;
   releaseDate: string;

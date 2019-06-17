@@ -2,7 +2,7 @@ import Album from './Album';
 import AlbumType from './AlbumType';
 
 export default interface Discography {
-  artistId: string;
+  id: string;
   sections: [
     {
       type: AlbumType;
