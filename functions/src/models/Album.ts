@@ -1,6 +1,6 @@
 import Title from './Title';
-import AlbumType from './AlbumType';
 import SongMetadata from './SongMetadata';
+import { AlbumType } from './AlbumType';
 
 export default interface Album {
   id: string;

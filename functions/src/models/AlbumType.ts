@@ -1,3 +1,1 @@
-export default interface AlbumType {
-  type: 'studio' | 'compilation' | 'ep' | 'other';
-}
+export type AlbumType = 'studio' | 'compilation' | 'ep' | 'other';

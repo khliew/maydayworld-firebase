@@ -1,4 +1,4 @@
-import AlbumType from './AlbumType';
+import { AlbumType } from './AlbumType';
 import AlbumMetadata from './AlbumMetadata';
 
 export default interface Section {
