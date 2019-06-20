@@ -104,7 +104,9 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
         album.id = after.id;
         album.title = after.title;
         album.releaseDate = after.releaseDate;
-        album.disabled = after.disabled;
+        if (typeof album.disabled !== "undefined") {
+          album.disabled = after.disabled;
+        }
       } else {
         section.albums.push({
           id: after.id,
@@ -147,7 +149,7 @@ export const onDeleteAlbum = (snapshot: DocumentSnapshot, context: EventContext)
       // remove album from section
       const index = section.albums.findIndex(item => item.id === album.id);
       if (index > -1) {
-        section.albums.splice(index);
+        section.albums.splice(index, 1);
       }
 
       discoRef.set(disco)
@@ -359,7 +361,9 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
 
       item.id = song.id;
       item.title = song.title;
-      item.disabled = song.disabled;
+      if (typeof song.disabled !== "undefined") {
+        item.disabled = song.disabled;
+      }
 
       batch.set(albumRef, album);
     })
@@ -392,7 +396,9 @@ function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: 
 
       item.id = song.id;
       item.title = song.title;
-      item.disabled = song.disabled;
+      if (typeof song.disabled !== "undefined") {
+        item.disabled = song.disabled;
+      }
 
       batch.set(albumRef, album);
     })
