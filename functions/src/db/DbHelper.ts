@@ -2,10 +2,9 @@ import * as admin from 'firebase-admin';
 import { Change, EventContext } from 'firebase-functions';
 import Album from '../models/Album';
 import Discography from '../models/Discography';
-import Title from '../models/Title';
 import Song from '../models/Song';
 import SongAlbum from '../models/SongAlbum';
-import SongMetadata from '../models/SongMetadata';
+import Title from '../models/Title';
 
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 type WriteBatch = admin.firestore.WriteBatch;
@@ -207,14 +206,10 @@ function updateAlbumSongLists(songId: string, song: Song) {
       const batch = admin.firestore().batch();
 
       // update albums with changed data
-      const updates: Promise<void>[] = [];
       const data = doc.data() as SongAlbum;
-      Object.keys(data).forEach(albumId => {
-        updates.push(writeSongToAlbum(albumId, data[albumId], song, batch));
-      });
+      Object.keys(data).forEach(albumId => writeSongToAlbum(albumId, data[albumId], song, batch));
 
-      Promise.all(updates)
-        .then(() => batch.commit())
+      batch.commit()
         .catch(error => console.error(error));
     })
     .catch(error => console.error(error));
@@ -245,13 +240,9 @@ export const onCreateSongAlbum = (snapshot: DocumentSnapshot, context: EventCont
       const batch = admin.firestore().batch();
 
       // update albums with changed data
-      const updates: Promise<void>[] = [];
-      Object.keys(songAlbum).forEach(albumId => {
-        updates.push(writeSongToAlbum(albumId, songAlbum[albumId], song, batch));
-      });
+      Object.keys(songAlbum).forEach(albumId => writeSongToAlbum(albumId, songAlbum[albumId], song, batch));
 
-      Promise.all(updates)
-        .then(() => batch.commit())
+      batch.commit()
         .catch(error => console.error(error));
     })
     .catch(error => console.error(error));
@@ -293,7 +284,7 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
           }
         } else {
           // added song to the album
-          changes.push(writeSongToAlbum(albumId, after[albumId], song, batch));
+          writeSongToAlbum(albumId, after[albumId], song, batch);
         }
       });
 
@@ -346,26 +337,23 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
         album.songs = {};
       }
 
+      const update: { [track: string]: any } = {};
+
       // remove song from previous track number
       const existing = album.songs[oldTrackNum];
       if (!!existing && existing.id === song.id) {
-        delete album.songs[oldTrackNum];
+        update[`songs.${oldTrackNum}`] = admin.firestore.FieldValue.delete();
       }
 
       // put song at new track number
-      let item = album.songs[newTrackNum];
-      if (!item) {
-        item = {} as SongMetadata;
-        album.songs[newTrackNum] = item;
-      }
+      const item = {
+        id: song.id,
+        title: song.title,
+        disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
+      };
+      update[`songs.${newTrackNum}`] = item;
 
-      item.id = song.id;
-      item.title = song.title;
-      if (typeof song.disabled !== "undefined") {
-        item.disabled = song.disabled;
-      }
-
-      batch.set(albumRef, album);
+      batch.update(albumRef, update);
     })
     .catch(error => console.error(error));
 }
@@ -375,34 +363,14 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
  */
 function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
-  return albumRef.get()
-    .then(albumDoc => {
-      if (!albumDoc.exists) {
-        return;
-      }
 
-      const album = albumDoc.data() as Album;
+  const item = {
+    id: song.id,
+    title: song.title,
+    disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
+  };
 
-      if (!album.songs) {
-        album.songs = {};
-      }
-
-      // replace song at trackNum
-      let item = album.songs[trackNum];
-      if (!item) {
-        item = {} as SongMetadata;
-        album.songs[trackNum] = item;
-      }
-
-      item.id = song.id;
-      item.title = song.title;
-      if (typeof song.disabled !== "undefined") {
-        item.disabled = song.disabled;
-      }
-
-      batch.set(albumRef, album);
-    })
-    .catch(error => console.error(error));
+  batch.update(albumRef, { [`songs.${trackNum}`]: item });
 }
 
 /**
@@ -429,10 +397,8 @@ function removeSongFromAlbum(albumId: string, trackNum: number, songId: string, 
       // remove only if the song ids match
       const existing = album.songs[trackNum];
       if (existing.id === songId) {
-        delete album.songs[trackNum];
+        batch.update(albumRef, { [`songs.${trackNum}`]: admin.firestore.FieldValue.delete() });
       }
-
-      batch.set(albumRef, album);
     })
     .catch(error => console.error(error));
 }
