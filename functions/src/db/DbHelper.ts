@@ -163,6 +163,7 @@ export const onDeleteAlbum = (snapshot: DocumentSnapshot, context: EventContext)
 export const onCreateSong = (snapshot: DocumentSnapshot, context: EventContext) => {
   const song = snapshot.data() as Song;
 
+  updateSongMeta(snapshot.id, song);
   updateAlbumSongLists(snapshot.id, song);
 };
 
@@ -178,6 +179,7 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
     return; // no changes to make to album
   }
 
+  updateSongMeta(change.after.id, after);
   updateAlbumSongLists(change.after.id, after);
 };
 
@@ -187,10 +189,28 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
 export const onDeleteSong = (snapshot: DocumentSnapshot, context: EventContext) => {
   const songId = snapshot.id;
 
-  // remove song from songAlbums collection
+  admin.firestore().doc(`songMetadatas/${songId}`).delete()
+    .catch(error => console.error(error));
+
   admin.firestore().doc(`songAlbums/${songId}`).delete()
     .catch(error => console.error(error));
 };
+
+function updateSongMeta(songId: string, song: Song) {
+  const smRef = admin.firestore().doc(`songMetadatas/${songId}`);
+
+  const item = {
+    id: song.id,
+    title: song.title,
+    lyricist: song.lyricist,
+    composer: song.composer,
+    arranger: song.arranger,
+    disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
+  };
+
+  smRef.set(item, { merge: true })
+    .catch(error => console.error(error));
+}
 
 /**
  * Updates the song list of albums associated with a song.
@@ -295,7 +315,6 @@ export const onUpdateSongAlbum = (change: Change<DocumentSnapshot>, context: Eve
 
       Promise.all(changes)
         .then(() => {
-          console.log('- batch.commit', song.id);
           batch.commit()
             .catch(error => console.error(error));
         })
@@ -335,17 +354,12 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
         return;
       }
 
-      console.log('updateSongInAlbum');
-
       const update: { [track: string]: any } = {};
       const album = albumDoc.data() as Album;
 
-      console.log('- album.songs', album.songs);
       if (!!album.songs) {
         // remove song from previous track number
         const existing = album.songs[oldTrackNum];
-        console.log('- existing.id', (!!existing) ? existing.id : 'undefined');
-        console.log('- song.id', song.id);
         if (!!existing && existing.id === song.id) {
           update[`songs.${oldTrackNum}`] = admin.firestore.FieldValue.delete();
         }
@@ -359,8 +373,6 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
       };
       update[`songs.${newTrackNum}`] = item;
 
-      console.log('- update', update);
-
       batch.update(albumRef, update);
     })
     .catch(error => console.error(error));
@@ -370,7 +382,6 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
  * Puts a song at `trackNum` position in an album.
  */
 function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
-  console.log('writeSongToAlbum');
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
 
   const item = {
@@ -379,8 +390,6 @@ function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: 
     disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
   };
 
-  console.log('- new item', item);
-  console.log('- add.trackNum', trackNum);
   batch.update(albumRef, { [`songs.${trackNum}`]: item });
 }
 
@@ -395,27 +404,19 @@ function removeSongFromAlbum(albumId: string, trackNum: number, songId: string, 
         return;
       }
 
-      console.log('removeSongFromAlbum');
-
       const album = albumDoc.data() as Album;
-
-      console.log('- album.songs', album.songs);
 
       if (!album.songs) {
         return;
       }
 
-      console.log('- album.songs[trackNum]', (!!album.songs[trackNum]));
       if (!album.songs[trackNum]) {
         return;
       }
 
       // remove only if the song ids match
       const existing = album.songs[trackNum];
-      console.log('- existing.id', (!!existing) ? existing.id : 'undefined');
-      console.log('- songId', songId);
       if (!!existing && existing.id === songId) {
-        console.log('- delete.trackNum', trackNum);
         batch.update(albumRef, { [`songs.${trackNum}`]: admin.firestore.FieldValue.delete() });
       }
     })
