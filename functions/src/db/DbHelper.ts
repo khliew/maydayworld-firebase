@@ -5,6 +5,8 @@ import Discography from '../models/Discography';
 import Song from '../models/Song';
 import SongAlbum from '../models/SongAlbum';
 import Title from '../models/Title';
+import SongMetadata from '../models/SongMetadata';
+import Track from '../models/Track';
 
 type DocumentSnapshot = admin.firestore.DocumentSnapshot;
 type WriteBatch = admin.firestore.WriteBatch;
@@ -19,6 +21,7 @@ export const onCreateAlbum = (snapshot: DocumentSnapshot, context: EventContext)
     return; // no section to put album in
   }
 
+  // get discography and add album into it
   const discoRef = admin.firestore().doc('discos/mayday');
   discoRef.get()
     .then(doc => {
@@ -28,16 +31,19 @@ export const onCreateAlbum = (snapshot: DocumentSnapshot, context: EventContext)
 
       const disco = doc.data() as Discography;
 
+      // create sections array if needed
       if (!disco.sections) {
         disco.sections = [];
       }
 
+      // find the correct section, creating it if necessary
       let section = disco.sections.find(item => item.type === album.type);
       if (!section) {
         section = { type: album.type, albums: [] };
         disco.sections.push(section);
       }
 
+      // add album
       section.albums.push({
         id: album.id,
         title: album.title,
@@ -45,6 +51,7 @@ export const onCreateAlbum = (snapshot: DocumentSnapshot, context: EventContext)
         disabled: album.disabled
       });
 
+      // save
       discoRef.set(disco)
         .catch(error => console.log(error));
     })
@@ -75,6 +82,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
 
       const disco = doc.data() as Discography;
 
+      // create sections array if needed
       if (!disco.sections) {
         disco.sections = [];
       }
@@ -90,6 +98,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
         }
       }
 
+      // find new section, creating it if necessary
       let section = disco.sections.find(item => item.type === after.type);
       if (!section) {
         section = { type: after.type, albums: [] };
@@ -115,6 +124,7 @@ export const onUpdateAlbum = (change: Change<DocumentSnapshot>, context: EventCo
         });
       }
 
+      // save
       discoRef.set(disco)
         .catch(error => console.log(error));
     })
@@ -137,20 +147,23 @@ export const onDeleteAlbum = (snapshot: DocumentSnapshot, context: EventContext)
       const disco = doc.data() as Discography;
 
       if (!disco.sections) {
-        return;
+        return; // no sections
       }
 
       const section = disco.sections.find(item => item.type === album.type);
       if (!section) {
-        return;
+        return; // album's section doesn't exist
+      }
+
+      const index = section.albums.findIndex(item => item.id === album.id);
+      if (index === -1) {
+        return; // album not found in section
       }
 
       // remove album from section
-      const index = section.albums.findIndex(item => item.id === album.id);
-      if (index > -1) {
-        section.albums.splice(index, 1);
-      }
+      section.albums.splice(index, 1);
 
+      // save
       discoRef.set(disco)
         .catch(error => console.log(error));
     })
@@ -163,7 +176,10 @@ export const onDeleteAlbum = (snapshot: DocumentSnapshot, context: EventContext)
 export const onCreateSong = (snapshot: DocumentSnapshot, context: EventContext) => {
   const song = snapshot.data() as Song;
 
+  // add song to songMetadata collection
   updateSongMeta(snapshot.id, song);
+
+  // add song to any associated album
   updateAlbumSongLists(snapshot.id, song);
 };
 
@@ -179,7 +195,10 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
     return; // no changes to make to album
   }
 
+  // update song in songMetadata collection
   updateSongMeta(change.after.id, after);
+  
+  // update any associated album
   updateAlbumSongLists(change.after.id, after);
 };
 
@@ -189,17 +208,23 @@ export const onUpdateSong = (change: Change<DocumentSnapshot>, context: EventCon
 export const onDeleteSong = (snapshot: DocumentSnapshot, context: EventContext) => {
   const songId = snapshot.id;
 
+  // delete song from songMetadata collection
   admin.firestore().doc(`songMetadatas/${songId}`).delete()
     .catch(error => console.error(error));
 
+  // delete song from songAlbums collection
   admin.firestore().doc(`songAlbums/${songId}`).delete()
     .catch(error => console.error(error));
 };
 
+/**
+ * Updates the song metadata for a song.
+ */
 function updateSongMeta(songId: string, song: Song) {
   const smRef = admin.firestore().doc(`songMetadatas/${songId}`);
 
-  const item = {
+  // create new song metadata
+  const item: SongMetadata = {
     id: song.id,
     title: song.title,
     lyricist: song.lyricist,
@@ -208,6 +233,7 @@ function updateSongMeta(songId: string, song: Song) {
     disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
   };
 
+  // save
   smRef.set(item, { merge: true })
     .catch(error => console.error(error));
 }
@@ -235,6 +261,9 @@ function updateAlbumSongLists(songId: string, song: Song) {
     .catch(error => console.error(error));
 }
 
+/**
+ * Compares two `Title`s and returns `true` if their field values are equal.
+ */
 function areTitlesEqual(title1: Title, title2: Title) {
   return title1.english === title2.english
     && title1.chinese.zht === title2.chinese.zht
@@ -366,7 +395,7 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
       }
 
       // put song at new track number
-      const item = {
+      const item: Track = {
         id: song.id,
         title: song.title,
         disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
@@ -384,7 +413,7 @@ function updateSongInAlbum(albumId: string, oldTrackNum: number, newTrackNum: nu
 function writeSongToAlbum(albumId: string, trackNum: number, song: Song, batch: WriteBatch) {
   const albumRef = admin.firestore().doc(`albums/${albumId}`);
 
-  const item = {
+  const item: Track = {
     id: song.id,
     title: song.title,
     disabled: typeof song.disabled !== 'undefined' ? song.disabled : false
