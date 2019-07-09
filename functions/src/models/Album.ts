@@ -1,6 +1,6 @@
-import Title from './Title';
-import SongMetadata from './SongMetadata';
 import { AlbumType } from './AlbumType';
+import Title from './Title';
+import Track from './Track';
 
 export default interface Album {
   id: string;
@@ -8,5 +8,5 @@ export default interface Album {
   title: Title;
   releaseDate: string;
   disabled: boolean;
-  songs: { [track: number]: SongMetadata };
+  songs: { [track: number]: Track };
 }
